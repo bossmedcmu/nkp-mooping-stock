@@ -1,4 +1,4 @@
-/* Isolated A4 Landscape Print Portal Styles */
+/* Isolated A4 Portrait & Landscape Print Portal Styles */
 
 .print-portal-overlay {
   position: fixed;
@@ -20,7 +20,7 @@
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
 }
 
-.a4-landscape-sheet {
+.a4-sheet-landscape {
   width: 277mm;
   min-height: 190mm;
   margin: 0 auto;
@@ -34,10 +34,28 @@
   line-height: 1.4;
 }
 
-.a4-landscape-sheet h1,
-.a4-landscape-sheet h2,
-.a4-landscape-sheet h3,
-.a4-landscape-sheet h4 {
+.a4-sheet-portrait {
+  width: 192mm;
+  min-height: 277mm;
+  margin: 0 auto;
+  background: #ffffff;
+  color: #111827;
+  padding: 9mm 9mm;
+  border-radius: 6px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.26);
+  font-family: 'Noto Sans Thai', 'Prompt', sans-serif;
+  font-size: 9.4pt;
+  line-height: 1.35;
+}
+
+.a4-sheet-landscape h1,
+.a4-sheet-landscape h2,
+.a4-sheet-landscape h3,
+.a4-sheet-landscape h4,
+.a4-sheet-portrait h1,
+.a4-sheet-portrait h2,
+.a4-sheet-portrait h3,
+.a4-sheet-portrait h4 {
   font-family: 'Prompt', 'Noto Sans Thai', sans-serif;
   color: #111827;
 }
@@ -58,6 +76,15 @@
   vertical-align: middle;
   word-break: keep-all;
   overflow-wrap: break-word;
+}
+
+.a4-table-portrait-full {
+  font-size: 7pt;
+}
+
+.a4-table-portrait-full th,
+.a4-table-portrait-full td {
+  padding: 3px 2px;
 }
 
 .a4-print-table thead th {
@@ -95,8 +122,12 @@
   break-inside: avoid;
 }
 
+.print-signature-grid.is-portrait {
+  gap: 10mm;
+  margin-top: 8mm;
+}
+
 @page {
-  size: A4 landscape;
   margin: 10mm;
 }
 
@@ -127,7 +158,8 @@
     display: none !important;
   }
 
-  .a4-landscape-sheet {
+  .a4-sheet-landscape,
+  .a4-sheet-portrait {
     width: 100% !important;
     min-height: auto !important;
     margin: 0 !important;

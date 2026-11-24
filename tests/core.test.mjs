@@ -8,8 +8,18 @@ import {
   parseDateString,
 } from '../src/utils/thaiTime.js';
 import { normalizeAllData } from '../src/utils/dataNormalizer.js';
-import { computeAnalytics, extractFiscalYears } from '../src/utils/analyticsEngine.js';
-import { parseCsvToRowObjects, SAMPLE_DRUG_CSV, SAMPLE_LAB_CSV } from '../src/data/sampleData.js';
+import {
+  computeAnalytics,
+  extractFiscalYears,
+  extractServiceModes,
+  filterRecords,
+} from '../src/utils/analyticsEngine.js';
+import {
+  buildRawRecordsCsv,
+  buildUnitSummaryCsv,
+  escapeCsvCell,
+} from '../src/utils/csvExporter.js';
+import { parseCsvToRowObjects, SAMPLE_DRUG_CSV, SAMPLE_LAB_CSV } from './fixtures.mjs';
 
 test('Thai Fiscal Year & Quarter boundaries (1 Oct - 30 Sep)', () => {
   assert.equal(getThaiFiscalYear('2026-09-30'), 2569);
@@ -74,4 +84,80 @@ test('Analytics Engine computes totals, groupings, and actionable insights accur
   assert.equal(result.byMonth.length, 2); // ต.ค. 2569 and พ.ย. 2569
   assert.equal(result.byQuarter.length, 1); // Q1/2570
   assert.ok(result.insights.recommendations.length >= 3);
+});
+
+test('Extended filterRecords supports dateStart, dateEnd, serviceMode, and entitlementKey', () => {
+  const labRaw = parseCsvToRowObjects(SAMPLE_LAB_CSV);
+  const drugRaw = parseCsvToRowObjects(SAMPLE_DRUG_CSV);
+  const { allRecords } = normalizeAllData(labRaw, drugRaw);
+
+  const modes = extractServiceModes(allRecords);
+  assert.ok(modes.includes('Yearly Lab'));
+  assert.ok(modes.includes('F/U Lab'));
+
+  const dateFiltered = filterRecords(allRecords, {
+    dateStart: '2026-11-01',
+    dateEnd: '2026-11-15',
+  });
+  assert.ok(dateFiltered.length > 0);
+  assert.ok(dateFiltered.every((r) => r.operationDate >= '2026-11-01' && r.operationDate <= '2026-11-15'));
+
+  const yearlyOnly = filterRecords(allRecords, { serviceMode: 'Yearly Lab' });
+  assert.ok(yearlyOnly.length > 0);
+  assert.ok(yearlyOnly.every((r) => r.serviceMode === 'Yearly Lab'));
+
+  const welfareOnly = filterRecords(allRecords, { entitlementKey: 'welfare' });
+  assert.ok(welfareOnly.length > 0);
+  assert.ok(welfareOnly.every((r) => r.entitlements.welfare > 0));
+});
+
+test('Deep Analytics computes MoM growth, Pareto 80/20, Unit Tiers, Heatmaps, and Data Quality', () => {
+  const labRaw = parseCsvToRowObjects(SAMPLE_LAB_CSV);
+  const drugRaw = parseCsvToRowObjects(SAMPLE_DRUG_CSV);
+  const { allRecords } = normalizeAllData(labRaw, drugRaw);
+
+  const result = computeAnalytics(allRecords, { fiscalYear: '2570', datasetMode: 'ALL' });
+  const deep = result.deepAnalytics;
+
+  assert.ok(deep.growthMetrics.momTotalPct !== null);
+  assert.equal(deep.growthMetrics.prevMonthLabel, 'ต.ค. 2569');
+  assert.equal(deep.growthMetrics.latestMonthLabel, 'พ.ย. 2569');
+
+  assert.ok(deep.paretoUnits.length === result.byUnit.length);
+  assert.ok(deep.paretoSummary.coreUnitCount >= 1);
+  assert.ok(deep.paretoSummary.coreSharePct >= 80);
+  assert.equal(deep.paretoUnits[deep.paretoUnits.length - 1].cumulativePct, 100);
+
+  const totalTiered =
+    deep.unitTiers.tierCounts.A + deep.unitTiers.tierCounts.B + deep.unitTiers.tierCounts.C;
+  assert.equal(totalTiered, result.byUnit.length);
+  assert.equal(deep.unitTiers.scatterPoints.length, result.byUnit.length);
+
+  assert.equal(deep.weekdayModeMatrix.rows.length, 7);
+  assert.ok(deep.weekdayModeMatrix.modes.length >= 3);
+  assert.equal(deep.unitMonthMatrix.months.length, 2);
+  assert.ok(deep.unitMonthMatrix.rows.length <= 12);
+
+  assert.ok(deep.dataQuality.onTimeWithin1DayPct > 90);
+  assert.equal(deep.dataQuality.mismatchRecords.length, 0);
+  assert.ok(deep.dataQuality.lagByUnit.length === result.byUnit.length);
+});
+
+test('CSV Exporter adds UTF-8 BOM and neutralizes formula injection characters', () => {
+  assert.equal(escapeCsvCell('=CMD()'), "'=CMD()");
+  assert.equal(escapeCsvCell('+1+1'), "'+1+1");
+  assert.equal(escapeCsvCell('-123'), "'-123");
+  assert.equal(escapeCsvCell('@SUM(A1)'), "'@SUM(A1)");
+  assert.equal(escapeCsvCell('รพ.สต.บ้านใหม่, เชียงใหม่'), '"รพ.สต.บ้านใหม่, เชียงใหม่"');
+
+  const labRaw = parseCsvToRowObjects(SAMPLE_LAB_CSV);
+  const drugRaw = parseCsvToRowObjects(SAMPLE_DRUG_CSV);
+  const { allRecords } = normalizeAllData(labRaw, drugRaw);
+  const result = computeAnalytics(allRecords, { fiscalYear: '2570', datasetMode: 'ALL' });
+
+  const unitCsv = buildUnitSummaryCsv(result.byUnit);
+  assert.ok(unitCsv.startsWith('\uFEFFลำดับ,รายชื่อ รพ.สต.'));
+
+  const rawCsv = buildRawRecordsCsv(result.filtered);
+  assert.ok(rawCsv.startsWith('\uFEFFวันที่ดำเนินการ,วันประทับเวลา'));
 });

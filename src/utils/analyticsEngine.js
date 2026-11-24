@@ -41,6 +41,14 @@ export function extractUnitNames(records) {
   return Array.from(units).sort((a, b) => a.localeCompare(b, 'th'));
 }
 
+export function extractServiceModes(records) {
+  const modes = new Set();
+  for (const r of records) {
+    if (r.serviceMode) modes.add(r.serviceMode);
+  }
+  return Array.from(modes).sort((a, b) => a.localeCompare(b, 'th'));
+}
+
 export function filterRecords(records, filters = {}) {
   const {
     fiscalYear = 'ALL',
@@ -48,6 +56,10 @@ export function filterRecords(records, filters = {}) {
     unitName = 'ALL',
     quarter = 'ALL',
     month = 'ALL',
+    dateStart = '',
+    dateEnd = '',
+    serviceMode = 'ALL',
+    entitlementKey = 'ALL',
     search = '',
   } = filters;
 
@@ -59,6 +71,10 @@ export function filterRecords(records, filters = {}) {
     if (unitName !== 'ALL' && r.unitName !== unitName) return false;
     if (quarter !== 'ALL' && Number(r.quarter) !== Number(quarter)) return false;
     if (month !== 'ALL' && Number(r.month) !== Number(month)) return false;
+    if (dateStart && r.operationDate < dateStart) return false;
+    if (dateEnd && r.operationDate > dateEnd) return false;
+    if (serviceMode !== 'ALL' && r.serviceMode !== serviceMode) return false;
+    if (entitlementKey !== 'ALL' && (r.entitlements?.[entitlementKey] || 0) <= 0) return false;
     if (q) {
       const hay = `${r.unitName} ${r.serviceMode} ${r.operationDate} ${r.datasetLabel}`.toLowerCase();
       if (!hay.includes(q)) return false;
@@ -415,6 +431,16 @@ export function computeAnalytics(allRecords, filters = {}) {
     filtered,
   });
 
+  const deepAnalytics = buildDeepAnalytics({
+    filtered,
+    summary,
+    byUnit,
+    byMonth,
+    byQuarter,
+    byDayOfWeek,
+    entitlementSummary,
+  });
+
   return {
     filtered,
     summary,
@@ -428,6 +454,302 @@ export function computeAnalytics(allRecords, filters = {}) {
     labModes,
     drugModes,
     insights,
+    deepAnalytics,
+  };
+}
+
+function calcGrowthPct(current, previous) {
+  if (!previous || previous <= 0) return null;
+  return Number((((current - previous) / previous) * 100).toFixed(1));
+}
+
+function buildDeepAnalytics({
+  filtered,
+  summary,
+  byUnit,
+  byMonth,
+  byQuarter,
+  byDayOfWeek,
+  entitlementSummary,
+}) {
+  // 1. Growth Metrics (MoM & QoQ)
+  const latestMonth = byMonth.length >= 1 ? byMonth[byMonth.length - 1] : null;
+  const prevMonth = byMonth.length >= 2 ? byMonth[byMonth.length - 2] : null;
+  const latestQuarter = byQuarter.length >= 1 ? byQuarter[byQuarter.length - 1] : null;
+  const prevQuarter = byQuarter.length >= 2 ? byQuarter[byQuarter.length - 2] : null;
+
+  const growthMetrics = {
+    momTotalPct: prevMonth ? calcGrowthPct(latestMonth.totalPatients, prevMonth.totalPatients) : null,
+    momLabPct: prevMonth ? calcGrowthPct(latestMonth.labPatients, prevMonth.labPatients) : null,
+    momDrugPct: prevMonth ? calcGrowthPct(latestMonth.drugPatients, prevMonth.drugPatients) : null,
+    latestMonthLabel: latestMonth?.label || '',
+    prevMonthLabel: prevMonth?.label || '',
+    qoqTotalPct: prevQuarter ? calcGrowthPct(latestQuarter.totalPatients, prevQuarter.totalPatients) : null,
+    qoqLabPct: prevQuarter ? calcGrowthPct(latestQuarter.labPatients, prevQuarter.labPatients) : null,
+    qoqDrugPct: prevQuarter ? calcGrowthPct(latestQuarter.drugPatients, prevQuarter.drugPatients) : null,
+    latestQuarterLabel: latestQuarter?.shortLabel || '',
+    prevQuarterLabel: prevQuarter?.shortLabel || '',
+  };
+
+  // 2. Pareto 80/20
+  let runningPatients = 0;
+  let coreUnitCount = 0;
+  let coreSharePct = 0;
+  const paretoUnits = byUnit.map((u) => {
+    const prevCumPct = summary.totalPatients > 0 ? (runningPatients / summary.totalPatients) * 100 : 0;
+    runningPatients += u.totalPatients;
+    const sharePct =
+      summary.totalPatients > 0
+        ? Number(((u.totalPatients / summary.totalPatients) * 100).toFixed(1))
+        : 0;
+    const cumulativePct =
+      summary.totalPatients > 0
+        ? Number(((runningPatients / summary.totalPatients) * 100).toFixed(1))
+        : 0;
+    const isCore80 = summary.totalPatients > 0 && prevCumPct < 80;
+    if (isCore80) {
+      coreUnitCount += 1;
+      coreSharePct = cumulativePct;
+    }
+    return {
+      unitName: u.unitName,
+      totalPatients: u.totalPatients,
+      labPatients: u.labPatients,
+      drugPatients: u.drugPatients,
+      sharePct,
+      cumulativePct,
+      isCore80,
+    };
+  });
+
+  const paretoSummary = {
+    coreUnitCount,
+    totalUnitCount: byUnit.length,
+    coreSharePct,
+  };
+
+  // 3. Unit Tiers (A / B / C) & Scatter points (Sessions vs Avg Patients/Session)
+  const nUnits = byUnit.length;
+  const tierACutoff = nUnits > 0 ? Math.max(1, Math.ceil(nUnits * 0.2)) : 0;
+  const tierBCutoff = nUnits > 1 ? Math.max(tierACutoff + 1, Math.ceil(nUnits * 0.5)) : tierACutoff;
+
+  const tierCounts = { A: 0, B: 0, C: 0 };
+  const tierLabels = {
+    A: 'Tier A (ภาระงานสูง)',
+    B: 'Tier B (ภาระงานปานกลาง)',
+    C: 'Tier C (ภาระงานน้อย)',
+  };
+
+  const tieredUnits = byUnit.map((u, idx) => {
+    let tier = 'C';
+    if (idx < tierACutoff) tier = 'A';
+    else if (idx < tierBCutoff) tier = 'B';
+    tierCounts[tier] += 1;
+    return {
+      unitName: u.unitName,
+      totalPatients: u.totalPatients,
+      totalSessions: u.totalSessions,
+      avgPatientsPerSession: u.avgPatientsPerSession,
+      labPatients: u.labPatients,
+      drugPatients: u.drugPatients,
+      tier,
+      tierLabel: tierLabels[tier],
+    };
+  });
+
+  const unitTiers = {
+    units: tieredUnits,
+    tierCounts,
+    scatterPoints: tieredUnits.map((u) => ({
+      unitName: u.unitName,
+      x: u.totalSessions,
+      y: u.avgPatientsPerSession,
+      totalPatients: u.totalPatients,
+      tier: u.tier,
+    })),
+  };
+
+  // 4. Entitlement Comparison (Lab vs Drug)
+  const entItems = entitlementSummary.map((e) => ({
+    ...e,
+    labPct: summary.labPatients > 0 ? Number(((e.labCount / summary.labPatients) * 100).toFixed(1)) : 0,
+    drugPct: summary.drugPatients > 0 ? Number(((e.drugCount / summary.drugPatients) * 100).toFixed(1)) : 0,
+  }));
+  const findEnt = (k) => entitlementSummary.find((e) => e.key === k)?.count || 0;
+  const ucNkp = findEnt('ucNkp');
+  const ucMaesa = findEnt('ucMaesa');
+  const ucKhajao = findEnt('ucKhajao');
+  const ucTotal = ucNkp + ucMaesa + ucKhajao;
+  const entitlementComparison = {
+    items: entItems,
+    ucBreakdown: {
+      ucNkp,
+      ucMaesa,
+      ucKhajao,
+      ucTotal,
+      ucSharePct:
+        summary.totalPatients > 0 ? Number(((ucTotal / summary.totalPatients) * 100).toFixed(1)) : 0,
+    },
+  };
+
+  // 5. Heatmap: Weekday x Service Mode
+  const modeTotalsMap = new Map();
+  for (const r of filtered) {
+    modeTotalsMap.set(r.serviceMode, (modeTotalsMap.get(r.serviceMode) || 0) + r.total);
+  }
+  const modes = Array.from(modeTotalsMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([m]) => m);
+
+  const weekdayModeBuckets = new Map();
+  for (const wd of byDayOfWeek) {
+    const cells = {};
+    for (const m of modes) {
+      cells[m] = { patients: 0, sessions: 0 };
+    }
+    weekdayModeBuckets.set(wd.dayIndex, {
+      dayIndex: wd.dayIndex,
+      label: wd.label,
+      totalPatients: wd.patients,
+      cells,
+    });
+  }
+
+  let maxWeekdayCellPatients = 0;
+  for (const r of filtered) {
+    const bucket = weekdayModeBuckets.get(r.dayOfWeek);
+    if (bucket && bucket.cells[r.serviceMode]) {
+      bucket.cells[r.serviceMode].patients += r.total;
+      bucket.cells[r.serviceMode].sessions += 1;
+      if (bucket.cells[r.serviceMode].patients > maxWeekdayCellPatients) {
+        maxWeekdayCellPatients = bucket.cells[r.serviceMode].patients;
+      }
+    }
+  }
+
+  const weekdayModeMatrix = {
+    modes,
+    rows: Array.from(weekdayModeBuckets.values()),
+    maxCellPatients: maxWeekdayCellPatients,
+  };
+
+  // 6. Heatmap: Top 12 Units x Month
+  const top12Units = byUnit.slice(0, 12);
+  const months = byMonth.map((m) => ({ monthKey: m.monthKey, label: m.label }));
+  const unitMonthBuckets = new Map();
+  for (const u of top12Units) {
+    const cells = {};
+    for (const m of months) cells[m.monthKey] = 0;
+    unitMonthBuckets.set(u.unitName, {
+      unitName: u.unitName,
+      totalPatients: u.totalPatients,
+      cells,
+    });
+  }
+
+  let maxUnitMonthPatients = 0;
+  for (const r of filtered) {
+    const uRow = unitMonthBuckets.get(r.unitName);
+    if (uRow && Object.prototype.hasOwnProperty.call(uRow.cells, r.monthKey)) {
+      uRow.cells[r.monthKey] += r.total;
+      if (uRow.cells[r.monthKey] > maxUnitMonthPatients) {
+        maxUnitMonthPatients = uRow.cells[r.monthKey];
+      }
+    }
+  }
+
+  const unitMonthMatrix = {
+    months,
+    rows: Array.from(unitMonthBuckets.values()),
+    maxCellPatients: maxUnitMonthPatients,
+  };
+
+  // 7. Data Quality & Timeliness
+  let onTimeSameDayCount = 0;
+  let onTimeWithin1DayCount = 0;
+  let totalLagDays = 0;
+  let maxLagDays = 0;
+  const lagUnitMap = new Map();
+  const mismatchRecords = [];
+  const delayedRecords = [];
+
+  for (const r of filtered) {
+    const effectiveLag = Math.max(0, r.lagDays || 0);
+    if (effectiveLag === 0) onTimeSameDayCount += 1;
+    if (effectiveLag <= 1) onTimeWithin1DayCount += 1;
+    totalLagDays += effectiveLag;
+    if (effectiveLag > maxLagDays) maxLagDays = effectiveLag;
+
+    if (!lagUnitMap.has(r.unitName)) {
+      lagUnitMap.set(r.unitName, {
+        unitName: r.unitName,
+        sessions: 0,
+        totalLag: 0,
+        maxLagDays: 0,
+        delayedSessions: 0,
+        within1DaySessions: 0,
+      });
+    }
+    const lu = lagUnitMap.get(r.unitName);
+    lu.sessions += 1;
+    lu.totalLag += effectiveLag;
+    if (effectiveLag > lu.maxLagDays) lu.maxLagDays = effectiveLag;
+    if (effectiveLag > 1) {
+      lu.delayedSessions += 1;
+      delayedRecords.push(r);
+    } else {
+      lu.within1DaySessions += 1;
+    }
+
+    if (r.hasMismatch) {
+      mismatchRecords.push({
+        id: r.id,
+        operationDate: r.operationDate,
+        unitName: r.unitName,
+        datasetLabel: r.datasetLabel,
+        reportedTotal: r.reportedTotal,
+        computedTotal: r.computedTotal,
+        diff: r.reportedTotal - r.computedTotal,
+      });
+    }
+  }
+
+  const totalSessions = filtered.length;
+  const lagByUnit = Array.from(lagUnitMap.values())
+    .map((lu) => ({
+      unitName: lu.unitName,
+      sessions: lu.sessions,
+      avgLagDays: lu.sessions > 0 ? Number((lu.totalLag / lu.sessions).toFixed(1)) : 0,
+      maxLagDays: lu.maxLagDays,
+      delayedSessions: lu.delayedSessions,
+      onTimeWithin1DayPct:
+        lu.sessions > 0 ? Number(((lu.within1DaySessions / lu.sessions) * 100).toFixed(1)) : 100,
+    }))
+    .sort((a, b) => b.avgLagDays - a.avgLagDays || b.delayedSessions - a.delayedSessions);
+
+  const dataQuality = {
+    onTimeSameDayCount,
+    onTimeWithin1DayCount,
+    onTimeSameDayPct:
+      totalSessions > 0 ? Number(((onTimeSameDayCount / totalSessions) * 100).toFixed(1)) : 0,
+    onTimeWithin1DayPct:
+      totalSessions > 0 ? Number(((onTimeWithin1DayCount / totalSessions) * 100).toFixed(1)) : 0,
+    avgLagDays: totalSessions > 0 ? Number((totalLagDays / totalSessions).toFixed(1)) : 0,
+    maxLagDays,
+    lagByUnit,
+    mismatchRecords,
+    delayedRecords: delayedRecords.sort((a, b) => b.lagDays - a.lagDays).slice(0, 30),
+  };
+
+  return {
+    growthMetrics,
+    paretoUnits,
+    paretoSummary,
+    unitTiers,
+    entitlementComparison,
+    weekdayModeMatrix,
+    unitMonthMatrix,
+    dataQuality,
   };
 }
 

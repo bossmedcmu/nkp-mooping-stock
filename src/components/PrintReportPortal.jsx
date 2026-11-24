@@ -6,6 +6,7 @@ import { formatThaiDateTime } from '../utils/thaiTime.js';
 
 const REPORT_TYPES = [
   { id: 'unit', label: 'ราย รพ.สต. / หน่วยบริการ' },
+  { id: 'day', label: 'รายวัน' },
   { id: 'month', label: 'รายเดือน' },
   { id: 'quarter', label: 'รายไตรมาส' },
   { id: 'fy', label: 'รายปีงบประมาณ' },
@@ -23,6 +24,8 @@ export default function PrintReportPortal({
   const [scope, setScope] = useState('ALL'); // 'ALL' | 'lab' | 'drug'
   const [printFy, setPrintFy] = useState(selectedFiscalYear || 'ALL');
   const [includeInsights, setIncludeInsights] = useState(true);
+  const [orientation, setOrientation] = useState('landscape'); // 'landscape' | 'portrait'
+  const [detailLevel, setDetailLevel] = useState('full'); // 'full' | 'compact'
 
   useEffect(() => {
     setPrintFy(selectedFiscalYear || 'ALL');
@@ -57,6 +60,18 @@ export default function PrintReportPortal({
         drugPatients: u.drugPatients,
         totalPatients: u.totalPatients,
         entitlements: u.entitlements,
+      }));
+    }
+    if (reportType === 'day') {
+      return printAnalytics.byDay.map((d) => ({
+        key: d.dateKey,
+        label: d.dateLabel,
+        subLabel: `${d.unitCount} แห่ง`,
+        sessions: d.totalSessions,
+        labPatients: d.labPatients,
+        drugPatients: d.drugPatients,
+        totalPatients: d.totalPatients,
+        entitlements: d.entitlements,
       }));
     }
     if (reportType === 'month') {
@@ -101,6 +116,8 @@ export default function PrintReportPortal({
       labPatients: 0,
       drugPatients: 0,
       totalPatients: 0,
+      ucTotal: 0,
+      otherTotal: 0,
       entitlements: {},
     };
     for (const f of ENTITLEMENT_FIELDS) totals.entitlements[f.key] = 0;
@@ -110,6 +127,13 @@ export default function PrintReportPortal({
       totals.labPatients += r.labPatients;
       totals.drugPatients += r.drugPatients;
       totals.totalPatients += r.totalPatients;
+      const rowUc =
+        (r.entitlements.ucNkp || 0) +
+        (r.entitlements.ucMaesa || 0) +
+        (r.entitlements.ucKhajao || 0);
+      const rowOther = Math.max(0, r.totalPatients - rowUc);
+      totals.ucTotal += rowUc;
+      totals.otherTotal += rowOther;
       for (const f of ENTITLEMENT_FIELDS) {
         totals.entitlements[f.key] += r.entitlements[f.key] || 0;
       }
@@ -119,6 +143,9 @@ export default function PrintReportPortal({
 
   if (!isOpen) return null;
 
+  const safeOrientation = orientation === 'portrait' ? 'portrait' : 'landscape';
+  const isPortrait = safeOrientation === 'portrait';
+  const isCompact = detailLevel === 'compact';
   const activeReportMeta = REPORT_TYPES.find((t) => t.id === reportType);
   const scopeLabel =
     scope === 'ALL'
@@ -127,18 +154,22 @@ export default function PrintReportPortal({
         ? 'เฉพาะรายการสนับสนุนส่งสิ่งส่งตรวจทางห้องปฏิบัติการ (Lab)'
         : 'เฉพาะทะเบียนเบิกยาที่ไม่มีใช้ใน รพ.สต.';
 
+  const pageCssRule = `@page { size: A4 ${safeOrientation}; margin: ${isPortrait ? '9mm' : '10mm'}; }`;
+
   const content = (
     <div className="print-portal-overlay">
+      <style>{pageCssRule}</style>
+
       {/* Toolbar (hidden on print) */}
       <div className="print-toolbar-card no-print">
         <div className="d-flex flex-wrap justify-content-between align-items-center gap-3">
           <div>
             <h5 className="fw-bold mb-1">
               <i className="bi bi-printer-fill text-danger me-2" />
-              ตั้งค่าพิมพ์รายงานสรุปผลการดำเนินงาน (ขนาด A4 แนวนอน)
+              ตั้งค่าพิมพ์รายงานสรุปผลการดำเนินงาน (ขนาด A4 {isPortrait ? 'แนวตั้ง' : 'แนวนอน'})
             </h5>
             <div className="small text-secondary">
-              เลือกรูปแบบตารางและขอบเขตข้อมูลที่ต้องการ ระบบจัดหน้ากระดาษแนวนอนอัตโนมัติ
+              เลือกแนวการวางกระดาษ (แนวตั้ง/แนวนอน) และระดับความละเอียดของตารางได้อิสระ
             </div>
           </div>
           <div className="d-flex gap-2">
@@ -150,7 +181,11 @@ export default function PrintReportPortal({
               <i className="bi bi-printer me-2" />
               สั่งพิมพ์ / บันทึกเป็น PDF
             </button>
-            <button type="button" className="btn btn-outline-secondary rounded-pill px-3" onClick={onClose}>
+            <button
+              type="button"
+              className="btn btn-outline-secondary rounded-pill px-3"
+              onClick={onClose}
+            >
               ปิด
             </button>
           </div>
@@ -159,7 +194,7 @@ export default function PrintReportPortal({
         <hr className="my-3" />
 
         <div className="row g-2 align-items-end">
-          <div className="col-12 col-md-4">
+          <div className="col-12 col-sm-6 col-lg-3">
             <label className="form-label small fw-semibold mb-1">รูปแบบรายงาน</label>
             <select
               className="form-select form-select-sm"
@@ -173,7 +208,7 @@ export default function PrintReportPortal({
               ))}
             </select>
           </div>
-          <div className="col-12 col-md-3">
+          <div className="col-6 col-sm-6 col-lg-2">
             <label className="form-label small fw-semibold mb-1">ขอบเขตข้อมูล</label>
             <select
               className="form-select form-select-sm"
@@ -185,7 +220,7 @@ export default function PrintReportPortal({
               <option value="drug">เฉพาะเบิกยา รพ.สต.</option>
             </select>
           </div>
-          <div className="col-12 col-md-3">
+          <div className="col-6 col-sm-6 col-lg-2">
             <label className="form-label small fw-semibold mb-1">ปีงบประมาณ</label>
             <select
               className="form-select form-select-sm"
@@ -200,7 +235,42 @@ export default function PrintReportPortal({
               ))}
             </select>
           </div>
-          <div className="col-12 col-md-2">
+
+          <div className="col-6 col-sm-6 col-lg-2">
+            <label className="form-label small fw-semibold mb-1">วางกระดาษ A4</label>
+            <div className="btn-group btn-group-sm w-100" role="group" aria-label="เลือกแนวการวางกระดาษ">
+              <button
+                type="button"
+                className={`btn ${orientation === 'landscape' ? 'btn-pastel-primary' : 'btn-pastel-soft'}`}
+                onClick={() => setOrientation('landscape')}
+              >
+                <i className="bi bi-file-earmark-break me-1" />
+                แนวนอน
+              </button>
+              <button
+                type="button"
+                className={`btn ${orientation === 'portrait' ? 'btn-pastel-primary' : 'btn-pastel-soft'}`}
+                onClick={() => setOrientation('portrait')}
+              >
+                <i className="bi bi-file-earmark-text me-1" />
+                แนวตั้ง
+              </button>
+            </div>
+          </div>
+
+          <div className="col-6 col-sm-6 col-lg-2">
+            <label className="form-label small fw-semibold mb-1">ความละเอียดตาราง</label>
+            <select
+              className="form-select form-select-sm"
+              value={detailLevel}
+              onChange={(e) => setDetailLevel(e.target.value)}
+            >
+              <option value="full">ครบทั้ง 8 สิทธิ</option>
+              <option value="compact">แบบสรุปย่อ (Lab–ยา–UC)</option>
+            </select>
+          </div>
+
+          <div className="col-12 col-lg-1">
             <div className="form-check">
               <input
                 id="chk-include-insights"
@@ -210,26 +280,26 @@ export default function PrintReportPortal({
                 onChange={(e) => setIncludeInsights(e.target.checked)}
               />
               <label className="form-check-label small" htmlFor="chk-include-insights">
-                แนบบทสรุป/แนวทาง
+                บทสรุป
               </label>
             </div>
           </div>
         </div>
       </div>
 
-      {/* A4 Landscape Sheet */}
-      <div className="a4-landscape-sheet">
-        <div className="d-flex justify-content-between align-items-start border-bottom border-2 pb-2 mb-3">
+      {/* A4 Sheet (Landscape or Portrait) */}
+      <div className={isPortrait ? 'a4-sheet-portrait' : 'a4-sheet-landscape'}>
+        <div className="d-flex justify-content-between align-items-start border-bottom border-2 pb-2 mb-3 gap-2">
           <div>
-            <h2 className="h5 fw-bold mb-1">
+            <h2 className={`${isPortrait ? 'h6' : 'h5'} fw-bold mb-1`}>
               รายงานสรุปผลการดำเนินงานสนับสนุนเครือข่ายบริการปฐมภูมิ ({activeReportMeta?.label})
             </h2>
-            <div className="small text-secondary">
+            <div className="small text-secondary" style={isPortrait ? { fontSize: '8.2pt' } : undefined}>
               ขอบเขต: {scopeLabel} | ปีงบประมาณ: {printFy === 'ALL' ? 'ทั้งหมด' : printFy} | ช่วงข้อมูล:{' '}
               {printAnalytics.summary.dateRangeStart} – {printAnalytics.summary.dateRangeEnd}
             </div>
           </div>
-          <div className="text-end small text-secondary">
+          <div className="text-end small text-secondary flex-shrink-0" style={isPortrait ? { fontSize: '8pt' } : undefined}>
             <div>อัปเดตข้อมูลล่าสุด: {lastUpdatedLabel}</div>
             <div>พิมพ์เมื่อ: {formatThaiDateTime(new Date())}</div>
           </div>
@@ -239,20 +309,30 @@ export default function PrintReportPortal({
         <div className="row g-2 mb-3">
           <div className="col-3">
             <div className="print-summary-box text-center">
-              <div className="small text-secondary">ผู้รับบริการรวม</div>
-              <div className="fw-bold fs-5">{printAnalytics.summary.totalPatients.toLocaleString()} ราย</div>
+              <div className="small text-secondary" style={isPortrait ? { fontSize: '8pt' } : undefined}>
+                ผู้รับบริการรวม
+              </div>
+              <div className={`fw-bold ${isPortrait ? 'fs-6' : 'fs-5'}`}>
+                {printAnalytics.summary.totalPatients.toLocaleString()} ราย
+              </div>
             </div>
           </div>
           <div className="col-3">
             <div className="print-summary-box text-center">
-              <div className="small text-secondary">จำนวนครั้งสนับสนุน</div>
-              <div className="fw-bold fs-5">{printAnalytics.summary.totalSessions.toLocaleString()} ครั้ง</div>
+              <div className="small text-secondary" style={isPortrait ? { fontSize: '8pt' } : undefined}>
+                จำนวนครั้งสนับสนุน
+              </div>
+              <div className={`fw-bold ${isPortrait ? 'fs-6' : 'fs-5'}`}>
+                {printAnalytics.summary.totalSessions.toLocaleString()} ครั้ง
+              </div>
             </div>
           </div>
           <div className="col-3">
             <div className="print-summary-box text-center">
-              <div className="small text-secondary">ส่งตรวจ Lab / เบิกยา</div>
-              <div className="fw-bold fs-6">
+              <div className="small text-secondary" style={isPortrait ? { fontSize: '8pt' } : undefined}>
+                ส่งตรวจ Lab / เบิกยา
+              </div>
+              <div className="fw-bold" style={isPortrait ? { fontSize: '9pt' } : undefined}>
                 {printAnalytics.summary.labPatients.toLocaleString()} /{' '}
                 {printAnalytics.summary.drugPatients.toLocaleString()} ราย
               </div>
@@ -260,82 +340,159 @@ export default function PrintReportPortal({
           </div>
           <div className="col-3">
             <div className="print-summary-box text-center">
-              <div className="small text-secondary">หน่วยบริการที่รับบริการ</div>
-              <div className="fw-bold fs-5">{printAnalytics.summary.activeUnitsCount} แห่ง</div>
+              <div className="small text-secondary" style={isPortrait ? { fontSize: '8pt' } : undefined}>
+                หน่วยบริการรับบริการ
+              </div>
+              <div className={`fw-bold ${isPortrait ? 'fs-6' : 'fs-5'}`}>
+                {printAnalytics.summary.activeUnitsCount} แห่ง
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Landscape Fixed Table */}
-        <table className="a4-print-table mb-3">
-          <thead>
-            <tr>
-              <th style={{ width: '4%' }}>ที่</th>
-              <th style={{ width: '21%' }}>
-                {reportType === 'unit' ? 'รายชื่อ รพ.สต. / หน่วยบริการ' : 'ช่วงเวลา'}
-              </th>
-              <th style={{ width: '6%' }}>ครั้ง</th>
-              <th style={{ width: '7%' }}>Lab (ราย)</th>
-              <th style={{ width: '7%' }}>ยา (ราย)</th>
-              {ENTITLEMENT_FIELDS.map((f) => (
-                <th key={f.key} style={{ width: '6%' }}>
-                  {f.shortLabel}
-                </th>
-              ))}
-              <th style={{ width: '7%' }}>รวม (ราย)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {normalizedRows.length === 0 ? (
+        {/* Report Table */}
+        {isCompact ? (
+          <table className="a4-print-table mb-3">
+            <thead>
               <tr>
-                <td colSpan={14} className="text-center py-3">
-                  ไม่มีข้อมูลในช่วงที่เลือก
-                </td>
+                <th style={{ width: '5%' }}>ที่</th>
+                <th style={{ width: '35%' }}>
+                  {reportType === 'unit' ? 'รายชื่อ รพ.สต. / หน่วยบริการ' : 'ช่วงเวลา / วันที่'}
+                </th>
+                <th style={{ width: '8%' }}>ครั้ง</th>
+                <th style={{ width: '10%' }}>Lab (ราย)</th>
+                <th style={{ width: '10%' }}>ยา (ราย)</th>
+                <th style={{ width: '11%' }}>กลุ่ม UC รวม</th>
+                <th style={{ width: '10%' }}>สิทธิอื่นๆ</th>
+                <th style={{ width: '11%' }}>รวม (ราย)</th>
               </tr>
-            ) : (
-              normalizedRows.map((row, idx) => (
-                <tr key={row.key}>
-                  <td className="text-center">{idx + 1}</td>
-                  <td>
-                    <div className="fw-semibold">{row.label}</div>
-                    {reportType !== 'unit' && (
-                      <div style={{ fontSize: '7.5pt', color: '#64748b' }}>{row.subLabel}</div>
-                    )}
+            </thead>
+            <tbody>
+              {normalizedRows.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-3">
+                    ไม่มีข้อมูลในช่วงที่เลือก
                   </td>
-                  <td className="text-end">{row.sessions.toLocaleString()}</td>
-                  <td className="text-end">{row.labPatients.toLocaleString()}</td>
-                  <td className="text-end">{row.drugPatients.toLocaleString()}</td>
-                  {ENTITLEMENT_FIELDS.map((f) => (
-                    <td key={f.key} className="text-end">
-                      {row.entitlements[f.key] ? row.entitlements[f.key].toLocaleString() : '-'}
-                    </td>
-                  ))}
-                  <td className="text-end fw-bold">{row.totalPatients.toLocaleString()}</td>
                 </tr>
-              ))
-            )}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={2} className="text-center">
-                รวมทั้งหมด
-              </td>
-              <td className="text-end">{columnTotals.sessions.toLocaleString()}</td>
-              <td className="text-end">{columnTotals.labPatients.toLocaleString()}</td>
-              <td className="text-end">{columnTotals.drugPatients.toLocaleString()}</td>
-              {ENTITLEMENT_FIELDS.map((f) => (
-                <td key={f.key} className="text-end">
-                  {columnTotals.entitlements[f.key].toLocaleString()}
+              ) : (
+                normalizedRows.map((row, idx) => {
+                  const ucTotal =
+                    (row.entitlements.ucNkp || 0) +
+                    (row.entitlements.ucMaesa || 0) +
+                    (row.entitlements.ucKhajao || 0);
+                  const otherTotal = Math.max(0, row.totalPatients - ucTotal);
+                  return (
+                    <tr key={row.key}>
+                      <td className="text-center">{idx + 1}</td>
+                      <td>
+                        <div className="fw-semibold">{row.label}</div>
+                        {reportType !== 'unit' && (
+                          <div style={{ fontSize: '7.5pt', color: '#64748b' }}>{row.subLabel}</div>
+                        )}
+                      </td>
+                      <td className="text-end">{row.sessions.toLocaleString()}</td>
+                      <td className="text-end">{row.labPatients.toLocaleString()}</td>
+                      <td className="text-end">{row.drugPatients.toLocaleString()}</td>
+                      <td className="text-end">{ucTotal.toLocaleString()}</td>
+                      <td className="text-end">{otherTotal.toLocaleString()}</td>
+                      <td className="text-end fw-bold">{row.totalPatients.toLocaleString()}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={2} className="text-center">
+                  รวมทั้งหมด
                 </td>
-              ))}
-              <td className="text-end">{columnTotals.totalPatients.toLocaleString()}</td>
-            </tr>
-          </tfoot>
-        </table>
+                <td className="text-end">{columnTotals.sessions.toLocaleString()}</td>
+                <td className="text-end">{columnTotals.labPatients.toLocaleString()}</td>
+                <td className="text-end">{columnTotals.drugPatients.toLocaleString()}</td>
+                <td className="text-end">{columnTotals.ucTotal.toLocaleString()}</td>
+                <td className="text-end">{columnTotals.otherTotal.toLocaleString()}</td>
+                <td className="text-end">{columnTotals.totalPatients.toLocaleString()}</td>
+              </tr>
+            </tfoot>
+          </table>
+        ) : (
+          <table
+            className={`a4-print-table mb-3 ${isPortrait ? 'a4-table-portrait-full' : ''}`}
+          >
+            <thead>
+              <tr>
+                <th style={{ width: '4%' }}>ที่</th>
+                <th style={{ width: isPortrait ? '22%' : '21%' }}>
+                  {reportType === 'unit' ? 'รายชื่อ รพ.สต. / หน่วยบริการ' : 'ช่วงเวลา / วันที่'}
+                </th>
+                <th style={{ width: isPortrait ? '5%' : '6%' }}>ครั้ง</th>
+                <th style={{ width: isPortrait ? '6%' : '7%' }}>Lab</th>
+                <th style={{ width: isPortrait ? '6%' : '7%' }}>ยา</th>
+                {ENTITLEMENT_FIELDS.map((f) => (
+                  <th key={f.key} style={{ width: '6%' }}>
+                    {f.shortLabel}
+                  </th>
+                ))}
+                <th style={{ width: isPortrait ? '9%' : '7%' }}>รวม</th>
+              </tr>
+            </thead>
+            <tbody>
+              {normalizedRows.length === 0 ? (
+                <tr>
+                  <td colSpan={14} className="text-center py-3">
+                    ไม่มีข้อมูลในช่วงที่เลือก
+                  </td>
+                </tr>
+              ) : (
+                normalizedRows.map((row, idx) => (
+                  <tr key={row.key}>
+                    <td className="text-center">{idx + 1}</td>
+                    <td>
+                      <div className="fw-semibold">{row.label}</div>
+                      {reportType !== 'unit' && (
+                        <div style={{ fontSize: isPortrait ? '6.6pt' : '7.5pt', color: '#64748b' }}>
+                          {row.subLabel}
+                        </div>
+                      )}
+                    </td>
+                    <td className="text-end">{row.sessions.toLocaleString()}</td>
+                    <td className="text-end">{row.labPatients.toLocaleString()}</td>
+                    <td className="text-end">{row.drugPatients.toLocaleString()}</td>
+                    {ENTITLEMENT_FIELDS.map((f) => (
+                      <td key={f.key} className="text-end">
+                        {row.entitlements[f.key] ? row.entitlements[f.key].toLocaleString() : '-'}
+                      </td>
+                    ))}
+                    <td className="text-end fw-bold">{row.totalPatients.toLocaleString()}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={2} className="text-center">
+                  รวมทั้งหมด
+                </td>
+                <td className="text-end">{columnTotals.sessions.toLocaleString()}</td>
+                <td className="text-end">{columnTotals.labPatients.toLocaleString()}</td>
+                <td className="text-end">{columnTotals.drugPatients.toLocaleString()}</td>
+                {ENTITLEMENT_FIELDS.map((f) => (
+                  <td key={f.key} className="text-end">
+                    {columnTotals.entitlements[f.key].toLocaleString()}
+                  </td>
+                ))}
+                <td className="text-end">{columnTotals.totalPatients.toLocaleString()}</td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
 
         {/* Insights & Next-step recommendations */}
         {includeInsights && (
-          <div className="print-summary-box mb-3" style={{ fontSize: '8.8pt' }}>
+          <div
+            className="print-summary-box mb-3"
+            style={{ fontSize: isPortrait ? '8pt' : '8.8pt' }}
+          >
             <div className="fw-bold mb-1">สรุปผลการวิเคราะห์และแนวทางการดำเนินงานครั้งต่อไป</div>
             <div className="mb-1">{printAnalytics.insights.executiveParagraph}</div>
             {printAnalytics.insights.recommendations.slice(0, 3).map((rec, i) => (
@@ -350,16 +507,19 @@ export default function PrintReportPortal({
         )}
 
         {/* Signature Block */}
-        <div className="print-signature-grid" style={{ fontSize: '9pt' }}>
+        <div
+          className={`print-signature-grid ${isPortrait ? 'is-portrait' : ''}`}
+          style={{ fontSize: isPortrait ? '8.2pt' : '9pt' }}
+        >
           <div className="text-center">
-            <div>ลงชื่อ ............................................................ ผู้จัดทำรายงาน</div>
-            <div className="mt-1">(............................................................)</div>
-            <div className="text-secondary">วันที่ ......... / ......................... / ...............</div>
+            <div>ลงชื่อ .................................................... ผู้จัดทำรายงาน</div>
+            <div className="mt-1">(....................................................)</div>
+            <div className="text-secondary">วันที่ ......... / ....................... / ...............</div>
           </div>
           <div className="text-center">
-            <div>ลงชื่อ ............................................................ ผู้ตรวจสอบ/หัวหน้างาน</div>
-            <div className="mt-1">(............................................................)</div>
-            <div className="text-secondary">วันที่ ......... / ......................... / ...............</div>
+            <div>ลงชื่อ .................................................... ผู้ตรวจสอบ/หัวหน้างาน</div>
+            <div className="mt-1">(....................................................)</div>
+            <div className="text-secondary">วันที่ ......... / ....................... / ...............</div>
           </div>
         </div>
       </div>

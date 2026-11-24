@@ -29,10 +29,10 @@ export default function NungMeawMascot({
       topUnit
         ? `เหมียวแอบส่องมาให้: "${topUnit.unitName}" นำโด่งเลย (${topUnit.totalPatients.toLocaleString()} ราย)!`
         : 'เหมียวพร้อมช่วยค้นหาข้อมูลทุก รพ.สต. แล้วนะ!',
-      'จะพิมพ์รายงาน A4 แนวนอนเมื่อไหร่ก็สะกิดนุ้งเหมียวได้เลยนะเหมียว~',
-      sourceType === 'sample'
-        ? 'แง้ว! ตอนนี้ยังเป็นข้อมูลตัวอย่างอยู่นะ อย่าลืมกด "ดึงข้อมูลล่าสุด" ข้างบนล่ะ!'
-        : `สิทธิ ${topEntitlement?.shortLabel || 'UC'} เยอะสุด (${topEntitlement?.pct || 0}%) นุ้งเหมียวจำแม่นมาก!`,
+      'จะพิมพ์รายงาน A4 แนวตั้งหรือแนวนอนเมื่อไหร่ก็สะกิดนุ้งเหมียวได้เลยนะเหมียว~',
+      sourceType === 'live'
+        ? `สิทธิ ${topEntitlement?.shortLabel || 'UC'} เยอะสุด (${topEntitlement?.pct || 0}%) นุ้งเหมียวจำแม่นมาก!`
+        : 'แง้ว! กดปุ่ม "ดึงข้อมูลล่าสุด" ข้างบนเพื่ออัปเดตข้อมูลจริงจากแหล่งข้อมูลได้เลย!',
       'ทำงานเหนื่อยมั้ย? พักดื่มน้ำหน่อย แต่นุ้งเหมียวยังไม่ยอมหยุดขยับหรอกนะ!',
     ];
     return msgs;
@@ -193,12 +193,34 @@ export default function NungMeawMascot({
               type="button"
               className="btn btn-sm btn-pastel-soft"
               onClick={() => {
+                onNavigateTab('deep');
+                setPanelOpen(false);
+              }}
+            >
+              <i className="bi bi-compass me-1" />
+              วิเคราะห์เชิงลึก
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-pastel-soft"
+              onClick={() => {
                 onNavigateTab('insights');
                 setPanelOpen(false);
               }}
             >
               <i className="bi bi-lightbulb me-1" />
               ดูแนวทางแก้ไข
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-pastel-soft"
+              onClick={() => {
+                onNavigateTab('about');
+                setPanelOpen(false);
+              }}
+            >
+              <i className="bi bi-info-circle me-1" />
+              เกี่ยวกับระบบ
             </button>
             <button type="button" className="btn btn-sm btn-pastel-soft" onClick={onSyncNow}>
               <i className="bi bi-arrow-repeat me-1" />
