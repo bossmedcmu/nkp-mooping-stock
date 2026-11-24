@@ -1,0 +1,78 @@
+name: Deploy Dashboard to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compute salted SHA-256 auth hashes from GitHub Secrets
+        env:
+          RAW_USER: ${{ secrets.APP_USERNAME }}
+          RAW_PASS: ${{ secrets.APP_PASSWORD }}
+          SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+          SCRIPT_KEY: ${{ secrets.APPS_SCRIPT_API_KEY }}
+        run: |
+          node -e '
+            const crypto = require("crypto");
+            const fs = require("fs");
+            const user = (process.env.RAW_USER || "").trim().toLowerCase();
+            const pass = process.env.RAW_PASS || "";
+            if (!user || !pass) {
+              console.error("Missing APP_USERNAME or APP_PASSWORD in GitHub Secrets.");
+              process.exit(1);
+            }
+            const salt = crypto.randomBytes(16).toString("hex");
+            const userHash = crypto.createHash("sha256").update(salt + ":" + user).digest("hex");
+            const passHash = crypto.createHash("sha256").update(salt + ":" + pass).digest("hex");
+            const envFile = process.env.GITHUB_ENV;
+            fs.appendFileSync(envFile, `VITE_AUTH_SALT=${salt}\n`);
+            fs.appendFileSync(envFile, `VITE_AUTH_USER_HASH=${userHash}\n`);
+            fs.appendFileSync(envFile, `VITE_AUTH_PASS_HASH=${passHash}\n`);
+            fs.appendFileSync(envFile, `VITE_APPS_SCRIPT_URL=${(process.env.SCRIPT_URL || "").trim()}\n`);
+            fs.appendFileSync(envFile, `VITE_APPS_SCRIPT_API_KEY=${(process.env.SCRIPT_KEY || "").trim()}\n`);
+          '
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
