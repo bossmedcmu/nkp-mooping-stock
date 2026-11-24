@@ -19,6 +19,12 @@ import {
   buildUnitSummaryCsv,
   escapeCsvCell,
 } from '../src/utils/csvExporter.js';
+import {
+  answerMascotQuestion,
+  computeMascotLayout,
+  DEFAULT_NUNG_MEAW_PREFS,
+  loadNungMeawPrefs,
+} from '../src/utils/nungMeawBrain.js';
 import { parseCsvToRowObjects, SAMPLE_DRUG_CSV, SAMPLE_LAB_CSV } from './fixtures.mjs';
 
 test('Thai Fiscal Year & Quarter boundaries (1 Oct - 30 Sep)', () => {
@@ -160,4 +166,57 @@ test('CSV Exporter adds UTF-8 BOM and neutralizes formula injection characters',
 
   const rawCsv = buildRawRecordsCsv(result.filtered);
   assert.ok(rawCsv.startsWith('\uFEFFวันที่ดำเนินการ,วันประทับเวลา'));
+});
+
+test('NungMeaw Q&A engine answers top unit, Lab vs Drug, entitlements, peak periods, and issues', () => {
+  const labRaw = parseCsvToRowObjects(SAMPLE_LAB_CSV);
+  const drugRaw = parseCsvToRowObjects(SAMPLE_DRUG_CSV);
+  const { allRecords } = normalizeAllData(labRaw, drugRaw);
+  const analytics = computeAnalytics(allRecords, { fiscalYear: '2570', datasetMode: 'ALL' });
+
+  const topAns = answerMascotQuestion('รพ.สต.ไหนเยอะสุด', analytics);
+  assert.ok(topAns.text.includes(analytics.byUnit[0].unitName));
+  assert.equal(topAns.action?.type, 'unit');
+
+  const compareAns = answerMascotQuestion('เทียบ Lab กับ ยา', analytics);
+  assert.ok(compareAns.text.includes('Lab'));
+  assert.ok(compareAns.text.includes('เบิกยา'));
+
+  const peakAns = answerMascotQuestion('เดือนไหนพีคสุด', analytics);
+  assert.ok(peakAns.text.includes('พ.ย. 2569') || peakAns.text.includes('ต.ค. 2569'));
+  assert.ok(!peakAns.text.includes('undefined'));
+
+  const issueAns = answerMascotQuestion('จุดผิดปกติและล่าช้า', analytics);
+  assert.ok(issueAns.text.includes('กฎ 80/20'));
+  assert.ok(!issueAns.text.includes('undefined'));
+
+  // Safe fallback when localStorage is absent in Node
+  const prefs = loadNungMeawPrefs();
+  assert.equal(prefs.outfitId, DEFAULT_NUNG_MEAW_PREFS.outfitId);
+
+  // Viewport clamping guarantees both cat and panel stay inside screen at all corners & mobile
+  const scenarios = [
+    { pos: null, vp: { w: 1280, h: 800 } },
+    { pos: { x: -100, y: -100 }, vp: { w: 1280, h: 800 } },
+    { pos: { x: 2000, y: 2000 }, vp: { w: 1280, h: 800 } },
+    { pos: { x: 250, y: 15 }, vp: { w: 360, h: 640 } },
+    { pos: { x: 20, y: 300 }, vp: { w: 360, h: 520 } },
+  ];
+  for (const s of scenarios) {
+    const layout = computeMascotLayout(s.pos, s.vp);
+    assert.ok(layout.catPos.x >= 16);
+    assert.ok(layout.catPos.y >= 16);
+    assert.ok(layout.catPos.x + layout.safeBox.w <= s.vp.w - 16);
+    assert.ok(layout.catPos.y + layout.safeBox.h <= s.vp.h - 16);
+
+    const pLeft = parseInt(layout.panelStyle.left, 10);
+    const pWidth = parseInt(layout.panelStyle.width, 10);
+    assert.ok(pLeft >= 12);
+    assert.ok(pLeft + pWidth <= s.vp.w - 12);
+
+    const bLeft = parseInt(layout.bubbleStyle.left, 10);
+    const bMaxW = parseInt(layout.bubbleStyle.maxWidth, 10);
+    assert.ok(bLeft >= 12);
+    assert.ok(bLeft + bMaxW <= s.vp.w - 12);
+  }
 });

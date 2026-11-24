@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import nungMeawImg from '../assets/nung-meaw.png';
+import NungMeawFigure from './NungMeawFigure.jsx';
+import { playMeowSound } from '../utils/nungMeawBrain.js';
 import {
   getRateLimitStatus,
   isDevFallbackMode,
   verifyCredentials,
 } from '../utils/authCrypto.js';
+
+const LOGIN_POSES = ['sit', 'happy', 'play', 'roll'];
 
 export default function LoginPage({
   onLoginSuccess,
@@ -13,12 +16,15 @@ export default function LoginPage({
   themePreference,
   onToggleThemePreference,
   todayThemeInfo,
+  meawPrefs,
 }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginPoseIdx, setLoginPoseIdx] = useState(0);
+  const [loginHearts, setLoginHearts] = useState(false);
 
   const devMode = isDevFallbackMode();
   const rateStatus = getRateLimitStatus();
@@ -66,11 +72,30 @@ export default function LoginPage({
 
       <div className="pastel-card p-4 p-md-5 w-100 my-auto" style={{ maxWidth: 440 }}>
         <div className="text-center mb-3">
-          <img
-            src={nungMeawImg}
-            alt="นุ้งเหมียวผู้ช่วยแดชบอร์ด"
-            className="login-hero-cat mb-2"
-          />
+          <div className="d-flex justify-content-center mb-2">
+            <button
+              type="button"
+              className="nung-meaw-figure-btn login-hero-cat-btn"
+              onClick={() => {
+                setLoginPoseIdx((i) => (i + 1) % LOGIN_POSES.length);
+                setLoginHearts(true);
+                playMeowSound('meow', meawPrefs?.soundEnabled ?? true);
+                setTimeout(() => setLoginHearts(false), 1200);
+              }}
+              title="คลิกทักทายนุ้งเหมียว"
+              aria-label="นุ้งเหมียวผู้ช่วยแดชบอร์ด"
+            >
+              <NungMeawFigure
+                pose={LOGIN_POSES[loginPoseIdx]}
+                outfitId={meawPrefs?.outfitId || 'none'}
+                headId={meawPrefs?.headId || 'none'}
+                eyeId={meawPrefs?.eyeId || 'none'}
+                syncOutfitWithTheme={meawPrefs?.syncOutfitWithTheme ?? true}
+                widthScale={1.15}
+                showHearts={loginHearts}
+              />
+            </button>
+          </div>
           <span className="badge badge-pastel px-3 py-2 mb-2 d-inline-block">
             <i className="bi bi-heart-pulse-fill me-1" />
             ระบบสนับสนุนเครือข่ายบริการปฐมภูมิ

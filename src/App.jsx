@@ -24,6 +24,8 @@ import {
   extractServiceModes,
 } from './utils/analyticsEngine.js';
 import { clearSession, getActiveSession } from './utils/authCrypto.js';
+import { buildUnitSummaryCsv, downloadCsvFile } from './utils/csvExporter.js';
+import { loadNungMeawPrefs, saveNungMeawPrefs } from './utils/nungMeawBrain.js';
 import { DAILY_THEMES, getBangkokDayOfWeek } from './utils/thaiTime.js';
 
 const COLOR_MODE_KEY = 'nkp_pcu_color_mode';
@@ -65,6 +67,8 @@ export default function App() {
       return 'auto';
     }
   });
+
+  const [meawPrefs, setMeawPrefs] = useState(() => loadNungMeawPrefs());
 
   const initialSyncTriggeredRef = useRef(false);
   const syncRequestSeqRef = useRef(0);
@@ -256,6 +260,20 @@ export default function App() {
     setSelectedEntitlement('ALL');
   }
 
+  const handleUpdateMeawPrefs = useCallback((patch) => {
+    setMeawPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      saveNungMeawPrefs(next);
+      return next;
+    });
+  }, []);
+
+  function handleExportCsvFromMascot() {
+    if (!analytics.byUnit.length) return;
+    const csv = buildUnitSummaryCsv(analytics.byUnit);
+    downloadCsvFile(csv, 'รายงานสรุปรายหน่วยบริการ.csv');
+  }
+
   function handleSelectUnitFromAnywhere(unitName) {
     setActiveTab('units');
     setSelectedUnitDetail(unitName);
@@ -271,6 +289,7 @@ export default function App() {
         themePreference={themePreference}
         onToggleThemePreference={handleToggleThemePreference}
         todayThemeInfo={todayThemeInfo}
+        meawPrefs={meawPrefs}
       />
     );
   }
@@ -502,12 +521,21 @@ export default function App() {
       <NungMeawMascot
         analytics={analytics}
         sourceType={dataset.sourceType}
+        isSyncing={isSyncing}
+        remainingMinutes={remainingMinutes}
+        datasetMode={datasetMode}
+        activeFilterCount={activeFilterCount}
+        prefs={meawPrefs}
+        onUpdatePrefs={handleUpdateMeawPrefs}
         onSelectUnitFromMascot={handleSelectUnitFromAnywhere}
         onOpenPrint={() => setIsPrintOpen(true)}
         onSyncNow={handleSyncNow}
         onToggleColorMode={handleToggleColorMode}
         onToggleThemePreference={handleToggleThemePreference}
         onNavigateTab={handleNavigateTab}
+        onChangeDatasetMode={setDatasetMode}
+        onResetFilters={handleResetDeepFilters}
+        onExportCsv={handleExportCsvFromMascot}
       />
 
       <PrintReportPortal

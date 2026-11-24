@@ -277,15 +277,13 @@ h6,
   filter: invert(1);
 }
 
-/* Nung Meaw Frameless 3D Mascot Animations */
+/* Nung Meaw Frameless 3D Mascot Animations & Interactive Stage */
 .nung-meaw-dock {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
   z-index: 1055;
   display: flex;
-  flex-direction: column;
   align-items: flex-end;
+  justify-content: center;
   pointer-events: none;
 }
 
@@ -293,31 +291,107 @@ h6,
   pointer-events: auto;
 }
 
+.nung-meaw-minimized-dock {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1055;
+}
+
+.nung-meaw-mover {
+  transition: transform 1.6s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
 .nung-meaw-figure-btn {
   background: transparent;
   border: none;
   padding: 0;
-  cursor: pointer;
+  cursor: grab;
   position: relative;
   outline: none;
+  touch-action: none;
+  user-select: none;
   transition: transform 0.2s ease;
 }
 
 .nung-meaw-figure-btn:hover {
-  transform: scale(1.07);
+  transform: scale(1.06);
 }
 
-.nung-meaw-img {
-  width: 118px;
-  height: auto;
-  display: block;
+.nung-meaw-figure-btn.is-dragging {
+  cursor: grabbing;
+  transform: scale(1.08);
+}
+
+.login-hero-cat-btn {
+  cursor: pointer;
+}
+
+.meaw-figure-stage {
+  position: relative;
+  display: inline-block;
   user-select: none;
-  filter: drop-shadow(0 12px 16px rgba(0, 0, 0, 0.22));
-  animation: meawFloat 3.4s ease-in-out infinite, meawWiggle 5.2s ease-in-out infinite;
   transform-origin: center bottom;
 }
 
-.nung-meaw-img.is-excited {
+.meaw-figure-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  position: relative;
+  z-index: 2;
+  user-select: none;
+  pointer-events: none;
+  filter: drop-shadow(0 12px 16px rgba(0, 0, 0, 0.22));
+}
+
+.meaw-outfit-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.meaw-outfit-back {
+  z-index: 1;
+}
+
+.meaw-outfit-front {
+  z-index: 3;
+}
+
+/* Pose-specific animations */
+.meaw-pose-sit {
+  animation: meawFloat 3.4s ease-in-out infinite, meawWiggle 5.2s ease-in-out infinite;
+}
+
+.meaw-pose-peek {
+  animation: meawPeek 2.4s ease-in-out infinite;
+}
+
+.meaw-pose-play {
+  animation: meawPlayPounce 1.9s ease-in-out infinite;
+}
+
+.meaw-pose-roll {
+  animation: meawRollRock 2.6s ease-in-out infinite;
+}
+
+.meaw-pose-sleep {
+  animation: meawSleepBreathe 3.8s ease-in-out infinite;
+}
+
+.meaw-pose-happy {
+  animation: meawHappyJump 1.6s ease-in-out infinite;
+}
+
+.meaw-pose-drag {
+  animation: meawDragDangle 0.65s ease-in-out infinite;
+}
+
+.meaw-pose-excited {
   animation: meawBounce 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -347,6 +421,69 @@ h6,
   }
 }
 
+@keyframes meawPeek {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-3deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(4deg) scale(1.03);
+  }
+}
+
+@keyframes meawPlayPounce {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  30% {
+    transform: translateY(-8px) rotate(-3deg) scale(1.03, 0.98);
+  }
+  65% {
+    transform: translateY(-2px) rotate(3deg) scale(0.99, 1.02);
+  }
+}
+
+@keyframes meawRollRock {
+  0%,
+  100% {
+    transform: rotate(-8deg) translateY(0);
+  }
+  50% {
+    transform: rotate(10deg) translateY(-5px);
+  }
+}
+
+@keyframes meawSleepBreathe {
+  0%,
+  100% {
+    transform: scale(1, 1) translateY(0);
+  }
+  50% {
+    transform: scale(1.03, 0.97) translateY(1px);
+  }
+}
+
+@keyframes meawHappyJump {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-10px) scale(1.03, 0.98);
+  }
+}
+
+@keyframes meawDragDangle {
+  0%,
+  100% {
+    transform: rotate(-6deg);
+  }
+  50% {
+    transform: rotate(6deg);
+  }
+}
+
 @keyframes meawBounce {
   0% {
     transform: scale(1) translateY(0);
@@ -362,9 +499,156 @@ h6,
   }
 }
 
+/* Floating Zzz, Hearts, Fish Treat & Toy Ball */
+.meaw-zzz-float {
+  position: absolute;
+  top: -12px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  gap: 2px;
+  font-weight: 700;
+  color: var(--accent-text);
+  pointer-events: none;
+}
+
+.meaw-zzz-float span {
+  display: inline-block;
+  animation: meawFloatUp 2.2s ease-in-out infinite;
+}
+
+.meaw-zzz-float span:nth-child(2) {
+  animation-delay: 0.4s;
+  font-size: 1.05rem;
+}
+
+.meaw-zzz-float span:nth-child(3) {
+  animation-delay: 0.8s;
+  font-size: 0.82rem;
+}
+
+.meaw-hearts-float {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.meaw-hearts-float span {
+  animation: meawHeartRise 1.3s ease-out forwards;
+}
+
+.meaw-hearts-float span:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.meaw-hearts-float span:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.meaw-treat-float {
+  position: absolute;
+  bottom: 18px;
+  left: -10px;
+  font-size: 1.4rem;
+  z-index: 6;
+  pointer-events: none;
+  animation: meawTreatPop 1.4s ease-out forwards;
+}
+
+.meaw-toy-ball {
+  position: absolute;
+  bottom: 4px;
+  left: -16px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fff1f2, var(--accent-primary));
+  border: 2px solid #ffffff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  z-index: 6;
+  pointer-events: none;
+  animation: meawBallBounce 0.9s ease-in-out infinite;
+}
+
+.meaw-status-pill {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-gradient);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.22);
+  z-index: 6;
+}
+
+@keyframes meawFloatUp {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.8);
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-18px) scale(1.1);
+  }
+}
+
+@keyframes meawHeartRise {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.7);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28px) scale(1.25);
+  }
+}
+
+@keyframes meawTreatPop {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.6) rotate(-15deg);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-8px) scale(1.2) rotate(10deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px) scale(0.9) rotate(0deg);
+  }
+}
+
+@keyframes meawBallBounce {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(12px, -22px) rotate(180deg);
+  }
+}
+
 /* Cloud speech bubble */
 .meaw-cloud-bubble {
-  position: relative;
+  position: fixed;
+  z-index: 1056;
   max-width: 265px;
   background: var(--bg-surface-solid);
   color: var(--text-main);
@@ -374,21 +658,32 @@ h6,
   font-size: 0.88rem;
   line-height: 1.45;
   box-shadow: 0 12px 28px -8px rgba(236, 72, 153, 0.28);
-  margin-bottom: 10px;
-  margin-right: 12px;
   animation: cloudPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.meaw-cloud-bubble::after {
+.meaw-cloud-bubble.bubble-above::after {
   content: '';
   position: absolute;
   bottom: -10px;
-  right: 34px;
+  left: var(--meaw-tail-left, 34px);
   width: 18px;
   height: 18px;
   background: var(--bg-surface-solid);
   border-right: 2px solid var(--accent-secondary);
   border-bottom: 2px solid var(--accent-secondary);
+  transform: rotate(45deg);
+}
+
+.meaw-cloud-bubble.bubble-below::after {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: var(--meaw-tail-left, 34px);
+  width: 18px;
+  height: 18px;
+  background: var(--bg-surface-solid);
+  border-left: 2px solid var(--accent-secondary);
+  border-top: 2px solid var(--accent-secondary);
   transform: rotate(45deg);
 }
 
@@ -404,14 +699,15 @@ h6,
 }
 
 .meaw-panel {
-  width: min(360px, calc(100vw - 28px));
-  max-height: 72vh;
+  position: fixed;
+  z-index: 1057;
+  width: min(372px, calc(100vw - 24px));
+  max-height: min(68vh, 520px);
   overflow-y: auto;
   background: var(--bg-surface-solid);
   border: 1.5px solid var(--accent-secondary);
   border-radius: 1.35rem;
   box-shadow: 0 20px 44px -10px rgba(0, 0, 0, 0.28);
-  margin-bottom: 12px;
 }
 
 .login-hero-cat {
@@ -463,11 +759,8 @@ h6,
 }
 
 @media (max-width: 576px) {
-  .nung-meaw-img {
-    width: 92px;
-  }
-  .nung-meaw-dock {
-    right: 10px;
-    bottom: 10px;
+  .meaw-cloud-bubble {
+    max-width: 220px;
+    font-size: 0.82rem;
   }
 }
